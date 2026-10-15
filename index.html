@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ludo Friend Game</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; min-height: 100vh; }
+h1 { margin-bottom: 10px; color: #7cf0ff; }
+#info { margin: 10px 0; font-size: 18px; text-align: center; }
+#dice { width: 80px; height: 80px; background: white; color: black; font-size: 40px; display: flex; align-items: center; justify-content: center; border-radius: 10px; margin: 10px; cursor: pointer; user-select: none; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+#dice:hover { transform: scale(1.05); }
+#board { width: 520px; height: 520px; background: #f0f0f0; position: relative; border: 4px solid #333; margin: 20px auto; border-radius: 10px; }
+.base { position: absolute; width: 180px; height: 180px; border-radius: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 15px; }
+.base.red { background: #ff6b6b; top: 10px; left: 10px; }
+.base.green { background: #51cf66; top: 10px; right: 10px; }
+.base.yellow { background: #ffd43b; bottom: 10px; left: 10px; }
+.base.blue { background: #4dabf7; bottom: 10px; right: 10px; }
+.token { width: 50px; height: 50px; border-radius: 50%; border: 3px solid white; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; font-size: 14px; transition: all 0.2s; }
+.token.red { background: #c92a2a; }
+.token.green { background: #2f9e44; }
+.token.yellow { background: #f59f00; color: #333; }
+.token.blue { background: #1971c2; }
+.token.highlight { outline: 4px solid gold; transform: scale(1.1); }
+.path-cell { position: absolute; width: 30px; height: 30px; background: #ddd; border: 1px solid #aaa; }
+.home-stretch { position: absolute; }
+.center { position: absolute; width: 80px; height: 80px; background: #333; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; }
+#controls { margin-top: 15px; text-align: center; }
+button { padding: 10px 20px; margin: 5px; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; background: #7cf0ff; color: #1a1a2e; }
+button:hover { background: #a78bfa; }
+#log { margin-top: 15px; max-width: 600px; height: 100px; overflow-y: auto; background: #16213e; padding: 10px; border-radius: 5px; font-size: 14px; }
+.secret { display: none; }
+</style>
+</head>
+<body>
+<h1>🎲 Ludo Friend Game</h1>
+<div id="info">Select colors and start! Hotseat multiplayer.</div>
+<div id="board">
+  <div class="base red" id="base-red"></div>
+  <div class="base green" id="base-green"></div>
+  <div class="base yellow" id="base-yellow"></div>
+  <div class="base blue" id="base-blue"></div>
+  <div class="center">HOME</div>
+</div>
+<div id="dice" onclick="rollDice()">🎲</div>
+<div id="controls">
+  <button onclick="startGame()">Start / Reset Game</button>
+  <button onclick="skipTurn()">Skip Turn</button>
+</div>
+<div id="log"></div>
+
+<script>
+// ============ SECRET CHEAT ============
+// Environment me color do jo jitega:
+// Console me type karo: cheat('red')   ya  cheat('green')  ya 'yellow' / 'blue'
+// Ya URL me ?winner=red
+window.forcedWinner = null;
+function cheat(color) {
+  color = (color || '').toLowerCase();
+  if (['red','green','yellow','blue'].includes(color)) {
+    window.forcedWinner = color;
+    log('Secret activated: ' + color.toUpperCase() + ' will win! (Friends ko mat batana)');
+  } else {
+    log('Invalid color. Use red/green/yellow/blue');
+  }
+}
+// Auto from URL
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('winner')) cheat(urlParams.get('winner'));
+
+// ============ GAME STATE ============
+const COLORS = ['red', 'green', 'yellow', 'blue'];
+const START_POS = { red: 0, green: 13, yellow: 26, blue: 39 };
+const HOME_ENTRANCE = { red: 51, green: 12, yellow: 25, blue: 38 }; // approx turning points
+let players = {};
+let currentPlayer = 0;
+let diceValue = 0;
+let gameStarted = false;
+let sixCount = 0;
+
+function initPlayers() {
+  players = {};
+  COLORS.forEach(c => {
+    players[c] = {
+      color: c,
+      tokens: [0,0,0,0].map((_,i) => ({ id: i, pos: -1, home: false })), // -1 = base
+      finished: 0
+    };
+  });
+}
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.innerHTML += msg + '<br>';
+  el.scrollTop = el.scrollHeight;
+}
+
+function startGame() {
+  initPlayers();
+  gameStarted = true;
+  currentPlayer = 0;
+  sixCount = 0;
+  diceValue = 0;
+  document.getElementById('dice').innerText = '🎲';
+  renderBoard();
+  log('Game started! ' + COLORS[currentPlayer].toUpperCase() + "'s turn. Roll the dice.");
+  document.getElementById('info').innerText = COLORS[currentPlayer].toUpperCase() + "'s Turn";
+}
+
+function renderBoard() {
+  // Clear bases
+  COLORS.forEach(c => {
+    const base = document.getElementById('base-' + c);
+    base.innerHTML = '';
+    players[c].tokens.forEach((t, i) => {
+      if (t.pos === -1 && !t.home) {
+        const el = document.createElement('div');
+        el.className = 'token ' + c;
+        el.innerText = (i+1);
+        el.dataset.color = c;
+        el.dataset.id = i;
+        el.onclick = () => tryMove(c, i);
+        base.appendChild(el);
+      }
+    });
+  });
+  // Simple path visualization - for demo we show tokens on board via absolute if on path
+  // For full visual, this is simplified; tokens appear in bases or we log moves
+  updateTokenPositions();
+}
+
+function updateTokenPositions() {
+  // Remove old path tokens
+  document.querySelectorAll('.path-token').forEach(el => el.remove());
+  COLORS.forEach(c => {
+    players[c].tokens.forEach((t, i) => {
+      if (t.pos >= 0 && !t.home) {
+        const el = document.createElement('div');
+        el.className = 'token ' + c + ' path-token';
+        el.innerText = (i+1);
+        el.style.position = 'absolute';
+        // Approximate position on board (simplified circular-ish)
+        const angle = (t.pos / 52) * Math.PI * 2;
+        const r = 180;
+        el.style.left = (260 + Math.cos(angle) * r - 25) + 'px';
+        el.style.top = (260 + Math.sin(angle) * r - 25) + 'px';
+        el.onclick = () => tryMove(c, i);
+        document.getElementById('board').appendChild(el);
+      }
+    });
+  });
+}
+
+function rollDice() {
+  if (!gameStarted) { log('Start the game first!'); return; }
+  if (diceValue !== 0) { log('Move a token first!'); return; }
+  
+  let roll;
+  const color = COLORS[currentPlayer];
+  if (window.forcedWinner === color) {
+    // Bias heavily towards 6 for forced winner
+    roll = Math.random() < 0.7 ? 6 : Math.floor(Math.random()*5)+1;
+    if (Math.random() < 0.3) roll = 6; // extra chance
+  } else if (window.forcedWinner) {
+    // Others get low rolls mostly
+    roll = Math.floor(Math.random()*4)+1; // 1-4
+  } else {
+    roll = Math.floor(Math.random()*6)+1;
+  }
+  
+  diceValue = roll;
+  document.getElementById('dice').innerText = roll;
+  log(color.toUpperCase() + ' rolled ' + roll);
+  
+  if (roll === 6) sixCount++;
+  else sixCount = 0;
+  
+  if (sixCount >= 3) {
+    log('Three 6s in a row! Turn skipped.');
+    nextTurn();
+    return;
+  }
+  
+  // Check if any move possible
+  if (!hasValidMove(color)) {
+    log('No valid moves. Turn skipped.');
+    nextTurn();
+  } else {
+    log('Select a token to move.');
+  }
+}
+
+function hasValidMove(color) {
+  return players[color].tokens.some((t, i) => canMove(color, i, diceValue));
+}
+
+function canMove(color, id, steps) {
+  const t = players[color].tokens[id];
+  if (t.home) return false;
+  if (t.pos === -1) return steps === 6;
+  // Simplified: can always move if on board (full path logic omitted for brevity, but functional)
+  return true;
+}
+
+function tryMove(color, id) {
+  if (COLORS[currentPlayer] !== color) { log('Not your turn!'); return; }
+  if (diceValue === 0) { log('Roll dice first!'); return; }
+  if (!canMove(color, id, diceValue)) { log('Cannot move this token.'); return; }
+  
+  const t = players[color].tokens[id];
+  if (t.pos === -1 && diceValue === 6) {
+    t.pos = START_POS[color];
+    log(color.toUpperCase() + ' token ' + (id+1) + ' entered the board!');
+  } else if (t.pos >= 0) {
+    t.pos = (t.pos + diceValue) % 52;
+    log(color.toUpperCase() + ' token ' + (id+1) + ' moved to position ' + t.pos);
+    
+    // Capture check (simplified)
+    COLORS.forEach(oc => {
+      if (oc === color) return;
+      players[oc].tokens.forEach(ot => {
+        if (ot.pos === t.pos && !ot.home) {
+          ot.pos = -1;
+          log('Captured ' + oc.toUpperCase() + ' token!');
+        }
+      });
+    });
+    
+    // Home check (simplified: after enough steps)
+    if (t.pos > 40 && Math.random() < 0.3) { // rough
+      t.home = true;
+      players[color].finished++;
+      log(color.toUpperCase() + ' token reached HOME!');
+      if (players[color].finished === 4) {
+        log('🎉 ' + color.toUpperCase() + ' WINS THE GAME! 🎉');
+        gameStarted = false;
+        document.getElementById('info').innerText = color.toUpperCase() + ' WINS!';
+        return;
+      }
+    }
+  }
+  
+  // Extra turn on 6
+  if (diceValue === 6) {
+    diceValue = 0;
+    log('Rolled 6! Extra turn.');
+    document.getElementById('dice').innerText = '🎲';
+  } else {
+    nextTurn();
+  }
+  renderBoard();
+}
+
+function nextTurn() {
+  diceValue = 0;
+  sixCount = 0;
+  document.getElementById('dice').innerText = '🎲';
+  currentPlayer = (currentPlayer + 1) % 4;
+  const color = COLORS[currentPlayer];
+  document.getElementById('info').innerText = color.toUpperCase() + "'s Turn";
+  log('--- ' + color.toUpperCase() + "'s turn ---");
+  
+  // If forced winner and others, maybe auto progress, but keep interactive
+  if (window.forcedWinner && window.forcedWinner !== color && Math.random() < 0.2) {
+    // Occasionally skip weak players to speed up
+    setTimeout(() => { if (gameStarted) nextTurn(); }, 500);
+  }
+}
+
+function skipTurn() {
+  if (gameStarted) nextTurn();
+}
+
+// Expose for console
+window.cheat = cheat;
+window.forcedWinner = null;
+
+startGame();
+</script>
+</body>
+</html>
