@@ -30,6 +30,12 @@ button { padding: 8px 16px; margin: 4px; border: none; border-radius: 6px; backg
 button:hover { background: #a78bfa; }
 #log { width: min(92vw, 540px); height: 80px; overflow-y: auto; background: #1a1a2e; padding: 8px; border-radius: 6px; font-size: 13px; margin-top: 6px; }
 </style>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#7cf0ff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ludo">
+<link rel="apple-touch-icon" href="/icon-192.png">
 </head>
 <body>
 <h1>🎲 Realistic Ludo</h1>
@@ -285,6 +291,13 @@ function skipTurn() { if (started) nextTurn(); }
 
 window.cheat = cheat;
 startGame();
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(e => console.log('SW failed', e));
+  });
+}
 </script>
 </body>
 </html>
