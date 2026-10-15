@@ -69,6 +69,18 @@ function cheat(color) {
 const urlParams = new URLSearchParams(window.location.search);
 if (urlParams.get('winner')) cheat(urlParams.get('winner'));
 
+// Vercel Environment Variable support
+// Set WINNER_COLOR=red (or green/yellow/blue) in Vercel Project Settings → Environment Variables
+fetch('/api/winner')
+  .then(r => r.json())
+  .then(data => {
+    if (data.winner && ['red','green','yellow','blue'].includes(data.winner)) {
+      cheat(data.winner);
+      console.log('Environment winner loaded:', data.winner);
+    }
+  })
+  .catch(() => {}); // silent if no API (local)
+
 // ============ GAME STATE ============
 const COLORS = ['red', 'green', 'yellow', 'blue'];
 const START_POS = { red: 0, green: 13, yellow: 26, blue: 39 };
