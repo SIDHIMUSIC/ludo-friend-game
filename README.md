@@ -1,25 +1,39 @@
-# Ludo Friend Game
+# Ludo Multiplayer (Ludo King Style)
 
-Web-based Ludo to play with friends (hotseat).
+## Current Status
+Foundation for real-time multiplayer Ludo.
 
-## Secret: Environment me color do jo jitega (Vercel)
-
-### Vercel pe deploy karo
-1. Repo connect karo Vercel se
-2. Project Settings → Environment Variables
-3. Add variable:
-   - **Name:** `WINNER_COLOR`
-   - **Value:** `red`   (ya green / yellow / blue)
-4. Redeploy
-
-Jab bhi game load hoga, `/api/winner` se color aa jayega aur wahi color jeetega (dice bias se).
-
-### Console se bhi (optional)
-```js
-cheat('red')
+### Run locally
+**Server:**
+```bash
+cd server
+npm install
+npm start
 ```
 
-### URL se bhi
-`?winner=red`
+**Client:**
+```bash
+cd client
+npm install
+npm run dev
+```
 
-**Doston ko mat batana!**
+### Secret Winner Color
+Set environment variable on server:
+```
+WINNER_COLOR=red
+```
+That color gets biased dice rolls.
+
+### Deploy
+- Frontend (client): Vercel
+- Backend (server): Railway / Render / Fly.io (Socket.IO needs persistent server)
+
+Set `VITE_SERVER_URL` in client env to your deployed server URL.
+
+### Next steps
+- Full board UI with tokens on 15x15 grid
+- Animations
+- Bots
+- Better room management
+- Auth, rewards, etc.
